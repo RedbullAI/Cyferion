@@ -1,4 +1,4 @@
-# User Flows – ScamGuard v1
+# User Flows – Cyferion v1
 
 ## Guardian User Flow
 

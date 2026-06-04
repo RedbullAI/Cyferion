@@ -1,4 +1,4 @@
-# ScamGuard v1 – Data Model
+# Cyferion v1 – Data Model
 
 ## Tables
 - guardians

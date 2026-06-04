@@ -1,7 +1,7 @@
-# User Roles & Permissions – ScamGuard
+# User Roles & Permissions – Cyferion
 
 ## Overview
-ScamGuard follows a family-based protection model where a primary user (Guardian) manages scam protection for vulnerable users.
+Cyferion follows a family-based protection model where a primary user (Guardian) manages scam protection for vulnerable users.
 
 ## Roles
 
@@ -22,7 +22,7 @@ Responsibilities:
 - Receive simple scam alerts
 - Optionally contact guardian
 
-### ScamGuard System
+### Cyferion System
 Automated system responsible for detection and alerting.
 
 Responsibilities:

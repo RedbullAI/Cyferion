@@ -1,4 +1,4 @@
-# ScamGuard v1 – API Specification
+# Cyferion v1 – API Specification
 
 ## Guardian APIs
 - GET /guardian/protected-users

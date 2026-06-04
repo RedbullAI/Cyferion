@@ -1,4 +1,4 @@
-# Wireframe-Ready Checklist – ScamGuard v1
+# Wireframe-Ready Checklist – Cyferion v1
 
 This document translates finalized user flows into concrete screens and system states
 required for implementation.
@@ -121,7 +121,7 @@ Build trust and user learning.
 ## Protected User Screens
 
 ### P1. Normal Usage
-- No ScamGuard UI visible
+- No Cyferion UI visible
 
 ---
 
