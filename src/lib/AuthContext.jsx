@@ -239,10 +239,14 @@ export const AuthProvider = ({ children }) => {
   // Secure sign-out (purges local session cookies/state)
   const signOut = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      await supabase.auth.signOut();
     } catch (error) {
       console.error('Sign-out failed:', error.message);
+    } finally {
+      // Always clear local state even if Supabase call fails
+      setUser(null);
+      setGuardianProfile(null);
+      setLoading(false);
     }
   };
 

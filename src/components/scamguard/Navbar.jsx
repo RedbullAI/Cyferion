@@ -12,7 +12,7 @@ export default function Sidebar() {
 
   const handleLogout = async () => {
     await signOut();
-    navigate('/');
+    window.location.href = '/';
   };
 
   const navLinks = [
