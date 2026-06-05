@@ -1,39 +1,35 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from './supabase';
 
-const AuthContext = createContext({
-  user: null,
-  guardianProfile: null,
-  loading: true,
-  signUp: async () => {},
-  signIn: async () => {},
-  signInWithGoogle: async () => {},
-  signOut: async () => {},
-});
+const AuthContext = createContext(null);
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth must be used within AuthProvider');
+  return context;
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [guardianProfile, setGuardianProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Fetch guardian profile details from public.guardians
+  // Fetch the guardian profile row from DB
   const fetchProfile = async (userId) => {
     try {
       const { data, error } = await supabase
         .from('guardians')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (error) {
-        // Profile might not exist yet (e.g. first OAuth login)
-        console.warn('Guardian profile not found, will attempt to create:', error.message);
+        console.warn('Profile fetch error:', error.message);
         setGuardianProfile(null);
         return null;
-      } else {
-        setGuardianProfile(data);
-        return data;
       }
+      setGuardianProfile(data);
+      return data;
     } catch (err) {
       console.error('Failed to load profile:', err);
       setGuardianProfile(null);
@@ -42,8 +38,9 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Ensure a guardian profile row exists for any authenticated user
-  // This handles both email signup and OAuth flows
   const ensureGuardianProfile = async (authUser) => {
+    if (!authUser?.id) return;
+
     const existing = await fetchProfile(authUser.id);
     if (existing) return; // Profile already exists
 
@@ -64,136 +61,107 @@ export const AuthProvider = ({ children }) => {
         });
 
       if (insertError) {
-        // Could be a duplicate key if profile was created in a race condition
         if (insertError.code === '23505') {
-          // Profile exists (duplicate), just fetch it
+          // Duplicate key — profile was created by database trigger, just fetch it
           await fetchProfile(authUser.id);
         } else {
-          console.error('Failed to create guardian profile:', insertError.message);
+          console.warn('Profile creation error (non-fatal):', insertError.message);
+          // Don't block — the user can still use the app, profile will be retried next session
         }
       } else {
-        // Successfully created — now fetch it
         await fetchProfile(authUser.id);
       }
     } catch (err) {
-      console.error('Error ensuring guardian profile:', err);
+      console.warn('Error ensuring guardian profile (non-fatal):', err);
     }
   };
 
   useEffect(() => {
-    let initialized = false;
+    let mounted = true;
 
-    // 1. Get initial session
     const initializeAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
+        if (mounted && session?.user) {
           setUser(session.user);
           await ensureGuardianProfile(session.user);
         }
       } catch (err) {
         console.error('Error getting initial session:', err);
       } finally {
-        initialized = true;
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     };
 
     initializeAuth();
 
-    // Safety net: if getSession() or ensureGuardianProfile() hangs for > 8 seconds, force loading to false
+    // Safety timeout — ALWAYS resolve loading after 5 seconds
     const safetyTimeout = setTimeout(() => {
-      if (!initialized) {
-        console.warn('Auth initialization timed out — forcing loading to false');
-        initialized = true;
-        setLoading(false);
-      }
-    }, 8000);
+      if (mounted) setLoading(false);
+    }, 5000);
 
-    // 2. Listen for auth changes (login, logout, token refresh, OAuth callback)
+    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        // Skip INITIAL_SESSION — already handled by getSession() above
         if (event === 'INITIAL_SESSION') return;
 
         if (event === 'SIGNED_OUT') {
-          setUser(null);
-          setGuardianProfile(null);
-          setLoading(false);
+          if (mounted) {
+            setUser(null);
+            setGuardianProfile(null);
+            setLoading(false);
+          }
           return;
         }
 
-        if (session?.user) {
+        if (session?.user && mounted) {
           setUser(session.user);
-
-          // On sign-in or OAuth callback, ensure profile exists
           if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
             await ensureGuardianProfile(session.user);
           }
+          setLoading(false);
         }
-        setLoading(false);
       }
     );
 
     return () => {
+      mounted = false;
       clearTimeout(safetyTimeout);
       subscription.unsubscribe();
     };
   }, []);
 
-  // Sign up a new Guardian with email/password
-  const signUp = async (email, password, name, phone) => {
+  // Sign up with email/password and create guardian profile
+  const signUp = async (email, password, fullName, phone) => {
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          // Pass user metadata so it's available immediately
-          data: {
-            full_name: name,
-            phone: phone,
-          },
-          // Skip email confirmation redirect — land back on our app
-          emailRedirectTo: `${window.location.origin}/dashboard`,
+          data: { full_name: fullName, phone },
         },
       });
-
       if (error) throw error;
 
-      // Check if email confirmation is required
-      // Supabase returns a user with identities=[] when email confirmation is pending
-      if (data?.user && (!data.user.identities || data.user.identities.length === 0)) {
-        // Email confirmation is enabled in Supabase — user needs to verify
-        return {
-          data,
-          error: null,
-          needsConfirmation: true,
-          message: 'Please check your email and click the confirmation link to activate your account.',
-        };
-      }
+      const needsConfirmation = !data.session;
 
-      // If email confirmation is disabled, user is immediately authenticated
-      if (data?.user && data.user.identities && data.user.identities.length > 0) {
+      if (data.user && data.session) {
+        setUser(data.user);
         // Create guardian profile immediately
         try {
-          const { error: profileError } = await supabase
-            .from('guardians')
-            .insert({
-              id: data.user.id,
-              name,
-              email,
-              phone: phone || '',
-            });
-
-          if (profileError && profileError.code !== '23505') {
-            console.error('Profile creation error:', profileError.message);
-          }
+          await supabase.from('guardians').insert({
+            id: data.user.id,
+            name: fullName,
+            email,
+            phone: phone || '',
+          });
+          await fetchProfile(data.user.id);
         } catch (profileErr) {
-          console.error('Profile insert exception:', profileErr);
+          console.warn('Profile creation during signup:', profileErr);
         }
       }
 
-      return { data, error: null, needsConfirmation: false };
+      return { data, error: null, needsConfirmation };
     } catch (error) {
       console.error('Sign-up failed:', error.message);
       return { data: null, error, needsConfirmation: false };
@@ -221,11 +189,7 @@ export const AuthProvider = ({ children }) => {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/dashboard`,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
+          redirectTo: window.location.origin + '/dashboard',
         },
       });
       if (error) throw error;
@@ -236,35 +200,33 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Secure sign-out (purges local session cookies/state)
+  // Secure sign-out
   const signOut = async () => {
     try {
       await supabase.auth.signOut();
     } catch (error) {
       console.error('Sign-out failed:', error.message);
     } finally {
-      // Always clear local state even if Supabase call fails
       setUser(null);
       setGuardianProfile(null);
       setLoading(false);
     }
   };
 
+  const value = {
+    user,
+    guardianProfile,
+    loading,
+    signUp,
+    signIn,
+    signInWithGoogle,
+    signOut,
+    fetchProfile,
+  };
+
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        guardianProfile,
-        loading,
-        signUp,
-        signIn,
-        signInWithGoogle,
-        signOut,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
 };
-
-export const useAuth = () => useContext(AuthContext);

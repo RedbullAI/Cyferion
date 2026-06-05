@@ -51,5 +51,46 @@ export function useProtectedUsers(guardianId) {
     }
   };
 
-  return { members, loading, error, refetch: fetchMembers, addMember };
+  const deleteMember = async (memberId) => {
+    try {
+      // First delete related messages and alerts
+      const { error: msgErr } = await supabase
+        .from('messages')
+        .delete()
+        .eq('protected_user_id', memberId);
+      if (msgErr) console.warn('Error deleting member messages:', msgErr.message);
+
+      const { error: delErr } = await supabase
+        .from('protected_users')
+        .delete()
+        .eq('id', memberId)
+        .eq('guardian_id', guardianId);
+      
+      if (delErr) throw delErr;
+      setMembers(prev => prev.filter(m => m.id !== memberId));
+      return { error: null };
+    } catch (err) {
+      return { error: err.message };
+    }
+  };
+
+  const updateMember = async (memberId, updates) => {
+    try {
+      const { data, error } = await supabase
+        .from('protected_users')
+        .update(updates)
+        .eq('id', memberId)
+        .eq('guardian_id', guardianId)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      setMembers(prev => prev.map(m => m.id === memberId ? data : m));
+      return { data, error: null };
+    } catch (err) {
+      return { data: null, error: err.message };
+    }
+  };
+
+  return { members, loading, error, refetch: fetchMembers, addMember, deleteMember, updateMember };
 }

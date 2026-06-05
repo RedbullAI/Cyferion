@@ -165,7 +165,14 @@ export default function Simulator() {
     return 'Low';
   };
 
-  if (loading) {
+  // Safety: timeout loading state after 5 seconds
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setLoadingTimedOut(true), 5000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (loading && !loadingTimedOut) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>

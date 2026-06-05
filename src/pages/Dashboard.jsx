@@ -76,7 +76,14 @@ export default function Dashboard() {
     return `${Math.floor(diff / 1440)}d ago`;
   };
 
-  const initialLoading = membersLoading && !refreshing;
+  // Safety: timeout loading state after 5 seconds to prevent infinite spinner
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setLoadingTimedOut(true), 5000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const initialLoading = membersLoading && !refreshing && !loadingTimedOut;
 
   if (initialLoading) {
     return (
