@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
-import { Users, User, Phone, ShieldAlert, ArrowLeft, Check, AlertCircle, PenLine, Trash2 } from 'lucide-react';
+import { Users, User, Phone, ShieldAlert, ArrowLeft, Check, AlertCircle, KeyRound, Send, ShieldCheck } from 'lucide-react';
 import { useProtectedUsers } from '../hooks/useProtectedUsers';
+import { toast } from 'sonner';
 
 export default function AddUser() {
   const { user } = useAuth();
@@ -18,6 +19,116 @@ export default function AddUser() {
   const [role, setRole] = useState('elderly');
   const [protectionLevel, setProtectionLevel] = useState('medium');
 
+  // OTP state
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [generatedOtp, setGeneratedOtp] = useState('');
+  const [otpInput, setOtpInput] = useState(['', '', '', '', '', '']);
+  const [otpError, setOtpError] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpTimer, setOtpTimer] = useState(0);
+  const otpRefs = useRef([]);
+
+  // OTP countdown timer
+  useEffect(() => {
+    if (otpTimer <= 0) return;
+    const interval = setInterval(() => {
+      setOtpTimer(prev => prev - 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [otpTimer]);
+
+  const generateOtp = () => {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  };
+
+  const handleSendOtp = () => {
+    if (!phone.trim() || phone.trim().length < 10) {
+      setOtpError('Please enter a valid phone number first.');
+      return;
+    }
+    setOtpError('');
+    setOtpLoading(true);
+
+    // Simulate network delay for realism
+    setTimeout(() => {
+      const otp = generateOtp();
+      setGeneratedOtp(otp);
+      setOtpSent(true);
+      setOtpVerified(false);
+      setOtpInput(['', '', '', '', '', '']);
+      setOtpTimer(60);
+      setOtpLoading(false);
+
+      // Show the OTP in a toast (for demo purposes — in production this would be a real SMS)
+      toast.success(`OTP sent to ${phone}`, {
+        description: `Demo OTP: ${otp}`,
+        icon: <Send className="h-5 w-5 text-primary" />,
+        duration: 15000,
+      });
+
+      // Focus first OTP input
+      setTimeout(() => otpRefs.current[0]?.focus(), 100);
+    }, 1200);
+  };
+
+  const handleOtpChange = (index, value) => {
+    if (!/^\d?$/.test(value)) return; // Only allow single digit
+    const newOtp = [...otpInput];
+    newOtp[index] = value;
+    setOtpInput(newOtp);
+    setOtpError('');
+
+    // Auto-focus next input
+    if (value && index < 5) {
+      otpRefs.current[index + 1]?.focus();
+    }
+
+    // Auto-verify when all 6 digits are entered
+    const fullOtp = newOtp.join('');
+    if (fullOtp.length === 6) {
+      if (fullOtp === generatedOtp) {
+        setOtpVerified(true);
+        setOtpError('');
+        toast.success('Phone number verified!', {
+          icon: <ShieldCheck className="h-5 w-5 text-emerald-500" />,
+          duration: 3000,
+        });
+      } else {
+        setOtpError('Invalid OTP. Please try again.');
+        setOtpVerified(false);
+      }
+    }
+  };
+
+  const handleOtpKeyDown = (index, e) => {
+    // Handle backspace to go to previous input
+    if (e.key === 'Backspace' && !otpInput[index] && index > 0) {
+      otpRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleOtpPaste = (e) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (pasted.length === 6) {
+      const newOtp = pasted.split('');
+      setOtpInput(newOtp);
+      otpRefs.current[5]?.focus();
+
+      if (pasted === generatedOtp) {
+        setOtpVerified(true);
+        setOtpError('');
+        toast.success('Phone number verified!', {
+          icon: <ShieldCheck className="h-5 w-5 text-emerald-500" />,
+          duration: 3000,
+        });
+      } else {
+        setOtpError('Invalid OTP. Please try again.');
+      }
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -31,6 +142,12 @@ export default function AddUser() {
 
     if (!name.trim() || !phone.trim()) {
       setError('All fields are required.');
+      setLoading(false);
+      return;
+    }
+
+    if (!otpVerified) {
+      setError('Please verify the phone number with OTP before adding.');
       setLoading(false);
       return;
     }
@@ -53,6 +170,18 @@ export default function AddUser() {
     } catch (err) {
       setError(err.message || 'Failed to add family member.');
       setLoading(false);
+    }
+  };
+
+  // Reset OTP when phone number changes
+  const handlePhoneChange = (e) => {
+    setPhone(e.target.value);
+    if (otpSent) {
+      setOtpSent(false);
+      setOtpVerified(false);
+      setGeneratedOtp('');
+      setOtpInput(['', '', '', '', '', '']);
+      setOtpTimer(0);
     }
   };
 
@@ -99,14 +228,95 @@ export default function AddUser() {
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sunita Kumar" className="form-input" required disabled={loading || success} />
           </div>
 
-          {/* Phone */}
+          {/* Phone + OTP */}
           <div>
             <label className="text-xs font-semibold text-slate-500 flex items-center gap-1.5 mb-1.5">
               <Phone className="h-3.5 w-3.5" /> Mobile Number
             </label>
-            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43212" className="form-input" required disabled={loading || success} />
-            <p className="text-[10px] text-slate-400 mt-1">Include country code for accurate matching</p>
+            <div className="flex gap-2">
+              <input
+                type="tel"
+                value={phone}
+                onChange={handlePhoneChange}
+                placeholder="+91 98765 43212"
+                className={`form-input flex-1 ${otpVerified ? 'border-emerald-300 bg-emerald-50/30' : ''}`}
+                required
+                disabled={loading || success || otpVerified}
+              />
+              {!otpVerified ? (
+                <button
+                  type="button"
+                  onClick={handleSendOtp}
+                  disabled={otpLoading || (otpTimer > 0) || loading || success || !phone.trim()}
+                  className="shrink-0 px-4 py-2 rounded-xl bg-primary text-white text-xs font-semibold hover:bg-primary-dark transition-all disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {otpLoading ? (
+                    <><div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"></div> Sending...</>
+                  ) : otpTimer > 0 ? (
+                    <><KeyRound className="h-3.5 w-3.5" /> Resend ({otpTimer}s)</>
+                  ) : otpSent ? (
+                    <><Send className="h-3.5 w-3.5" /> Resend OTP</>
+                  ) : (
+                    <><Send className="h-3.5 w-3.5" /> Send OTP</>
+                  )}
+                </button>
+              ) : (
+                <div className="shrink-0 px-4 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600 text-xs font-semibold flex items-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5" /> Verified
+                </div>
+              )}
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">
+              {otpVerified
+                ? '✅ Phone number verified and consent confirmed.'
+                : 'An OTP will be sent to verify the family member\'s consent.'}
+            </p>
           </div>
+
+          {/* OTP Input Section */}
+          {otpSent && !otpVerified && (
+            <div className="p-4 rounded-xl bg-blue-50/50 border border-blue-100 space-y-3">
+              <div className="flex items-center gap-2">
+                <KeyRound className="h-4 w-4 text-primary" />
+                <span className="text-xs font-semibold text-slate-700">Enter 6-digit OTP</span>
+                <span className="text-[10px] text-slate-400 ml-auto">
+                  Sent to {phone}
+                </span>
+              </div>
+
+              <div className="flex justify-center gap-2">
+                {otpInput.map((digit, i) => (
+                  <input
+                    key={i}
+                    ref={(el) => (otpRefs.current[i] = el)}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handleOtpChange(i, e.target.value)}
+                    onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                    onPaste={i === 0 ? handleOtpPaste : undefined}
+                    className={`w-11 h-12 text-center text-lg font-bold rounded-xl border-2 outline-none transition-all ${
+                      otpError
+                        ? 'border-red-300 bg-red-50 text-red-600'
+                        : digit
+                          ? 'border-primary bg-primary/5 text-primary'
+                          : 'border-slate-200 bg-white text-slate-800 focus:border-primary focus:bg-primary/5'
+                    }`}
+                    disabled={loading || success}
+                  />
+                ))}
+              </div>
+
+              {otpError && (
+                <p className="text-[11px] text-red-500 text-center font-medium">{otpError}</p>
+              )}
+
+              <p className="text-[10px] text-slate-400 text-center">
+                💡 For demo: Check the toast notification for the OTP code
+              </p>
+            </div>
+          )}
 
           {/* Role */}
           <div>
@@ -160,10 +370,16 @@ export default function AddUser() {
             </p>
           </div>
 
-          <button type="submit" disabled={loading || success}
-            className="w-full bg-primary text-white rounded-xl py-3 text-sm font-semibold hover:bg-primary-dark transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+          <button type="submit" disabled={loading || success || !otpVerified}
+            className={`w-full rounded-xl py-3 text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
+              otpVerified
+                ? 'bg-primary text-white hover:bg-primary-dark disabled:opacity-50'
+                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+            }`}>
             {loading ? (
               <><div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div> Adding...</>
+            ) : !otpVerified ? (
+              <><KeyRound className="h-4 w-4" /> Verify Phone to Continue</>
             ) : (
               <><Users className="h-4 w-4" /> Add Family Member</>
             )}
