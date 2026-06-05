@@ -142,6 +142,9 @@ export default function Simulator() {
     } else if (type === 'scam_electricity') {
       setSenderHandle('9876543210');
       setSmsText('Dear Consumer, your electricity connection will be suspended tonight at 9:30 PM. Call electricity officer at 9876543211.');
+    } else if (type === 'quarantine_otp') {
+      setSenderHandle('UNKNOWN');
+      setSmsText('Verify your Netflix account details immediately to avoid service interruption.');
     } else {
       setSenderHandle('HDFC-ALERT');
       setSmsText('Your HDFC bank account ending 5432 has been credited with INR 45,000 via NEFT on 28-05-2026. If not you, contact branch.');
@@ -217,6 +220,7 @@ export default function Simulator() {
                   <div className="flex flex-wrap gap-2">
                     <button type="button" onClick={() => loadPreset('scam_bank')} className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-red-50 border border-red-100 text-red-500 hover:bg-red-100 transition-colors">KYC Phishing</button>
                     <button type="button" onClick={() => loadPreset('scam_electricity')} className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-100 text-amber-600 hover:bg-amber-100 transition-colors">Electricity Scam</button>
+                    <button type="button" onClick={() => loadPreset('quarantine_otp')} className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-600 hover:bg-yellow-100 transition-colors">⚠️ Suspicious OTP</button>
                     <button type="button" onClick={() => loadPreset('safe_msg')} className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-600 hover:bg-emerald-100 transition-colors">Safe Message</button>
                   </div>
                 </div>
