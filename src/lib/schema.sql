@@ -81,10 +81,19 @@ ALTER TABLE public.scam_analysis ENABLE ROW LEVEL SECURITY;
 -- 4. ROW-LEVEL SECURITY POLICIES
 -- --------------------------------------------------------------------
 
--- RLS: guardians
-CREATE POLICY "Allow guardians to manage their own profile" ON public.guardians
-    FOR ALL
+-- RLS: guardians (read/update own profile)
+CREATE POLICY "Allow guardians to read and update their own profile" ON public.guardians
+    FOR SELECT
+    USING (auth.uid() = id);
+
+CREATE POLICY "Allow guardians to update their own profile" ON public.guardians
+    FOR UPDATE
     USING (auth.uid() = id)
+    WITH CHECK (auth.uid() = id);
+
+-- RLS: guardians (create own profile on first login)
+CREATE POLICY "Allow authenticated users to create their own guardian profile" ON public.guardians
+    FOR INSERT
     WITH CHECK (auth.uid() = id);
 
 -- RLS: protected_users
