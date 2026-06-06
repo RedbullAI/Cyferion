@@ -6,6 +6,10 @@ const router = express.Router();
 
 // POST /api/ingest-sms
 router.post('/ingest-sms', async (req, res) => {
+  if (!supabase) {
+    return res.status(503).json({ error: 'Database not configured. Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables.' });
+  }
+
   const { sender, message, targetPhone } = req.body;
 
   if (!sender || !message || !targetPhone) {
